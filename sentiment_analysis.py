@@ -1,13 +1,13 @@
 # Import necessary libraries
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
+from imblearn.over_sampling import RandomOverSampler  
 import re
 
-# Loads the dataset
+# Load the dataset
 dataset_path = '/content/amazon_books_Data.csv'
 df = pd.read_csv(dataset_path)
 
@@ -41,13 +41,35 @@ X = vectorizer.fit_transform(df['review_body'])
 # Split the data into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(X, df['label'], test_size=0.2, random_state=42)
 
-# Creates and trains a Random Forest classifier
-classifier = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced', min_samples_split=5)
-classifier.fit(X_train, y_train)
+# Oversample the minority class
+oversampler = RandomOverSampler(random_state=42)
+X_train_resampled, y_train_resampled = oversampler.fit_resample(X_train, y_train)
 
-# Makes predictions on the test set
+# Create and train a Random Forest classifier with hyperparameter tuning
+param_grid = {
+    'n_estimators': [50, 100, 200],
+    'min_samples_split': [2, 5, 10],
+}
+
+grid_search = GridSearchCV(RandomForestClassifier(random_state=42, class_weight='balanced'), param_grid, cv=5)
+grid_search.fit(X_train_resampled, y_train_resampled)
+
+# Get the best parameters
+best_params = grid_search.best_params_
+
+# Train the classifier with the best parameters on the resampled data
+classifier = RandomForestClassifier(n_estimators=best_params['n_estimators'], 
+                                    min_samples_split=best_params['min_samples_split'],
+                                    random_state=42, class_weight='balanced')
+classifier.fit(X_train_resampled, y_train_resampled)
+
+# Make predictions on the test set
 predictions = classifier.predict(X_test)
 
-# Evaluates the model
-print("Classification Report:\n", classification_report(y_test, predictions))
+# Evaluate the model
+precision, recall, f1_score, _ = precision_recall_fscore_support(y_test, predictions, average='weighted', zero_division=1)
+print("Best Parameters:", best_params)
+print("Precision:", precision)
+print("Recall:", recall)
+print("F1 Score:", f1_score)
 print("Confusion Matrix:\n", confusion_matrix(y_test, predictions))
