@@ -73,3 +73,6 @@ print("Precision:", precision)
 print("Recall:", recall)
 print("F1 Score:", f1_score)
 print("Confusion Matrix:\n", confusion_matrix(y_test, predictions))
+
+# TODO: Address the issue of predicting minority class (label 0)
+# The model still struggles to correctly predict instances of the minority class.
