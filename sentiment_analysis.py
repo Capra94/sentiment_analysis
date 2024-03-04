@@ -1,10 +1,12 @@
 # Import necessary libraries
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
 from imblearn.over_sampling import RandomOverSampler  
+from sklearn.svm import SVC
+from xgboost import XGBClassifier
 import re
 
 # Load the dataset
@@ -35,6 +37,8 @@ def preprocess_text(text):
 df['review_body'] = df['review_body'].apply(preprocess_text)
 
 # Feature extraction using TF-IDF with stop words
+from sklearn.feature_extraction.text import TfidfVectorizer
+
 vectorizer = TfidfVectorizer(stop_words='english')
 X = vectorizer.fit_transform(df['review_body'])
 
@@ -45,34 +49,28 @@ X_train, X_test, y_train, y_test = train_test_split(X, df['label'], test_size=0.
 oversampler = RandomOverSampler(random_state=42)
 X_train_resampled, y_train_resampled = oversampler.fit_resample(X_train, y_train)
 
-# Create and train a Random Forest classifier with hyperparameter tuning
-param_grid = {
-    'n_estimators': [50, 100, 200],
-    'min_samples_split': [2, 5, 10],
-}
+# Fine-tune Support Vector Machine (SVM) parameters with class weights
+svm_classifier = SVC(kernel='linear', C=1, gamma='scale', class_weight='balanced', random_state=42)
+svm_classifier.fit(X_train_resampled, y_train_resampled)
+predictions_svm = svm_classifier.predict(X_test)
 
-grid_search = GridSearchCV(RandomForestClassifier(random_state=42, class_weight='balanced'), param_grid, cv=5)
-grid_search.fit(X_train_resampled, y_train_resampled)
+# Evaluate the SVM model
+precision_svm, recall_svm, f1_score_svm, _ = precision_recall_fscore_support(y_test, predictions_svm, average='weighted', zero_division=1)
+print("Support Vector Machine (SVM):")
+print("Precision:", precision_svm)
+print("Recall:", recall_svm)
+print("F1 Score:", f1_score_svm)
+print("Confusion Matrix:\n", confusion_matrix(y_test, predictions_svm))
 
-# Get the best parameters
-best_params = grid_search.best_params_
+# Fine-tune Gradient Boosting (XGBoost) parameters
+xgb_classifier = XGBClassifier(scale_pos_weight=(len(y_train) - y_train.sum()) / y_train.sum(), learning_rate=0.1, max_depth=3, n_estimators=100, random_state=42)
+xgb_classifier.fit(X_train_resampled, y_train_resampled)
+predictions_xgb = xgb_classifier.predict(X_test)
 
-# Train the classifier with the best parameters on the resampled data
-classifier = RandomForestClassifier(n_estimators=best_params['n_estimators'], 
-                                    min_samples_split=best_params['min_samples_split'],
-                                    random_state=42, class_weight='balanced')
-classifier.fit(X_train_resampled, y_train_resampled)
-
-# Make predictions on the test set
-predictions = classifier.predict(X_test)
-
-# Evaluate the model
-precision, recall, f1_score, _ = precision_recall_fscore_support(y_test, predictions, average='weighted', zero_division=1)
-print("Best Parameters:", best_params)
-print("Precision:", precision)
-print("Recall:", recall)
-print("F1 Score:", f1_score)
-print("Confusion Matrix:\n", confusion_matrix(y_test, predictions))
-
-# TODO: Address the issue of predicting minority class (label 0)
-# The model still struggles to correctly predict instances of the minority class.
+# Evaluate the XGBoost model
+precision_xgb, recall_xgb, f1_score_xgb, _ = precision_recall_fscore_support(y_test, predictions_xgb, average='weighted', zero_division=1)
+print("\nGradient Boosting (XGBoost):")
+print("Precision:", precision_xgb)
+print("Recall:", recall_xgb)
+print("F1 Score:", f1_score_xgb)
+print("Confusion Matrix:\n", confusion_matrix(y_test, predictions_xgb))
